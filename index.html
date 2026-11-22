@@ -40,7 +40,7 @@
       <div data-figures aria-live="polite"></div>
       <div class="actions" data-cart-actions hidden>
         <button class="primary" type="submit" form="taller-line">Guardar pedido</button>
-        <button type="submit" form="taller-line" value="share">Guardar y enviar al taller</button>
+
       </div>
     </section>
     <section data-panel="editor" hidden>
@@ -271,6 +271,15 @@
       <div class="fields" data-detail></div>
     </section>
     <p data-notice role="status" hidden></p>
+    <dialog data-made-dialog aria-labelledby="made-title">
+      <div class="made-heading">
+        <h2 id="made-title">Pedido fabricado</h2>
+        <button type="button" data-close-made aria-label="Cerrar aviso">×</button>
+      </div>
+      <p data-made-reference></p>
+      <p>Listo para recoger.</p>
+      <button type="button" class="primary" data-open-made>Ver pedido</button>
+    </dialog>
   </div>
 </div>
 <style>
@@ -409,6 +418,18 @@
   #taller-preview .elbow-layout {margin-bottom:28px;}
   #taller-preview .needed {--y:19%;}
 }
+#taller-preview input:not([type=checkbox]):not([type=radio]),#taller-preview select,#taller-preview textarea {border:1px solid var(--muted,#9ab6ac);}
+#taller-preview :is(input,select,textarea):focus-visible {outline:2px solid var(--teal);outline-offset:1px;}
+#taller-preview dialog {box-sizing:border-box;width:min(90vw,380px);padding:16px;border:1px solid #728f85;border-radius:16px;background:#21332e;color:#f1fbf7;}
+#taller-preview dialog::backdrop {background:#0009;}
+#taller-preview .made-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;}
+#taller-preview .made-heading h2 {margin:0;}
+#taller-preview .made-heading button {min-width:44px;}
+#taller-preview .spool-choices {grid-template-columns:repeat(3,minmax(0,1fr));}
+#taller-preview .spool-choices button {overflow-wrap:anywhere;}
+#taller-preview .cone-drawing {grid-template-columns:repeat(2,minmax(0,1fr));max-width:none;}
+#taller-preview .cone-drawing svg {grid-column:1/-1;grid-row:1;max-width:160px;justify-self:center;}
+#taller-preview .cone-drawing :is(input,select) {font-size:16px;}
 #taller-preview [data-notice] {margin-top:10px;color:var(--teal);}
 </style>
 <script>
@@ -1067,7 +1088,7 @@
     editor.elements.figureDevelopment.disabled = !enabled;
   }
   editor.elements.assignLine.onchange = updateFigureLine;
-  function detail(record, share = false) {
+  function detail(record) {
     const area = find('[data-detail]');
     const status = record.made ? 'Fabricado' : record.sent ? 'Enviado' : 'Pendiente de envío';
     const action = node('button', 'Enviar al taller', 'primary');
@@ -1079,9 +1100,9 @@
       return button;
     });
     area.replaceChildren(node('h2', referenceFor(record)), node('p', (record.additional ? 'Pedido adicional · ' : '') + status),
-      ...record.figures.map(figureCard), action, ...historyButtons);
+      action, ...record.figures.map(figureCard), ...historyButtons);
     if (record.montage) area.insertBefore(node('p', record.montage), area.children[1]);
-    show('detail'); if (share) sendRecord(record);
+    show('detail');
   }
   function renderHistory() {
     const query = find('[data-search]').value.trim().toLowerCase();
@@ -1344,7 +1365,7 @@
     line.elements.montage.disabled = false;
     find('[data-line-title]').textContent = 'Mediciones de taller';
     renderFigures();
-    detail(record, event.submitter?.value === 'share');
+    detail(record);
   };
   function report(error) {
     if (error.status === 401 || error.status === 403) {
@@ -1382,16 +1403,30 @@
     editor.elements.figureMaterial.replaceChildren(...materials.materials.map(material =>
       new Option(typeof material === 'string' ? material : material.name)));
   }
+  let refreshingOrders = false;
   async function refreshOrders() {
-    if (!account) return;
-    const {orders} = await api.call('/orders',account);
-    for (const entry of orders) {
-      const existing = records.find(record => record.id === entry.id);
-      const remote = api.record(entry);
-      if (existing) Object.assign(existing, remote);
-      else records.push(remote);
+    if (!account || refreshingOrders) return;
+    refreshingOrders = true;
+    const user = account;
+    try {
+      const {orders} = await api.call('/orders',user);
+      if (user !== account) return;
+      const madeBefore = new Set(JSON.parse(localStorage.getItem('mediciones.made.' + user.token) || '[]'));
+      const known = localStorage.getItem('mediciones.made.' + user.token) !== null;
+      for (const entry of orders) {
+        const existing = records.find(record => record.id === entry.id);
+        const remote = api.record(entry);
+        if (existing) Object.assign(existing, remote);
+        else records.push(remote);
+        if (known && remote.made && !madeBefore.has(remote.id) && visibleMade?.id !== remote.id && !madeNotices.some(item => item.id === remote.id)) madeNotices.push(remote);
+        if (!known && remote.made) madeBefore.add(remote.id);
+      }
+      localStorage.setItem('mediciones.made.' + user.token, JSON.stringify([...madeBefore]));
+      if (activeScreen === 'history') renderHistory();
+      showMadeNotice();
+    } finally {
+      refreshingOrders = false;
     }
-    if (activeScreen === 'history') renderHistory();
   }
   async function sendRecord(record) {
     if (sending || record.sent) return;
@@ -1408,6 +1443,69 @@
   for (const selector of ['[data-screen="montages"]','[data-screen="materials"]','[data-workshop-option]']) {
     root.querySelectorAll(selector).forEach(button => button.remove());
   }
+  const madeNotices = [];
+  const madeDialog = find('[data-made-dialog]');
+  let audioContext, visibleMade;
+  const tones = {Campana:[740,988], Doble:[520,520], Suave:[440,660]};
+  const sound = document.createElement('select');
+  for (const name of ['Silencio', ...Object.keys(tones)]) sound.add(new Option(name));
+  sound.value = localStorage.getItem('mediciones.alertSound') || 'Campana';
+  const soundLabel = node('label','Sonido de pedido fabricado');
+  soundLabel.append(sound);
+  const previewSound = node('button','Probar y activar sonido');
+  function playSound() {
+    const notes = tones[sound.value];
+    if (!notes || audioContext?.state !== 'running') return;
+    const now = audioContext.currentTime;
+    notes.forEach((frequency,index) => {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      const start = now + index * 0.24;
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.001,start);
+      gain.gain.exponentialRampToValueAtTime(0.13,start+0.025);
+      gain.gain.exponentialRampToValueAtTime(0.001,start+0.20);
+      oscillator.connect(gain).connect(audioContext.destination);
+      oscillator.start(start);
+      oscillator.stop(start+0.21);
+    });
+  }
+  function unlockSound() {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio || sound.value === 'Silencio') return Promise.resolve();
+    audioContext ||= new Audio();
+    return audioContext.resume();
+  }
+  sound.onchange = () => {
+    localStorage.setItem('mediciones.alertSound',sound.value);
+    unlockSound().then(playSound).catch(() => {});
+  };
+  previewSound.onclick = () => unlockSound().then(playSound).catch(() => {});
+  root.addEventListener('click', () => unlockSound().catch(() => {}), {once:true});
+  find('[data-panel="options"]').append(soundLabel,previewSound);
+  function showMadeNotice() {
+    if (madeDialog.open || !madeNotices.length || document.hidden) return;
+    const record = madeNotices.shift();
+    visibleMade = record;
+    find('[data-made-reference]').textContent = [referenceFor(record), record.montage].filter(Boolean).join(' · ');
+    find('[data-open-made]').onclick = () => { madeDialog.close(); detail(record); };
+    madeDialog.showModal();
+    playSound();
+  }
+  find('[data-close-made]').onclick = () => madeDialog.close();
+  madeDialog.onclose = () => {
+    if (account && visibleMade) {
+      const key = 'mediciones.made.' + account.token;
+      const seen = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+      seen.add(visibleMade.id);
+      localStorage.setItem(key,JSON.stringify([...seen]));
+    }
+    visibleMade = null;
+    showMadeNotice();
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (account && !document.hidden) { showMadeNotice(); refreshOrders().catch(() => {}); }
+  });
   const reload = node('button','Actualizar fábricas y materiales');
   reload.onclick = () => refreshCatalog().then(() => show('options','Catálogo actualizado.')).catch(report);
   find('[data-panel="options"]').append(reload);
@@ -1415,7 +1513,7 @@
   disconnect.onclick = () => {
     if (!window.confirm('¿Desvincular este iPhone del taller?')) return;
     api.setAccount(null);
-    account = null; records.length = 0; figures = []; additional = ''; line.reset();
+    account = null; madeNotices.length = 0; madeDialog.close(); records.length = 0; figures = []; additional = ''; line.reset();
     renderFigures(); show('link');
   };
   find('[data-panel="options"]').append(disconnect);
@@ -1423,7 +1521,7 @@
   show(account ? 'new' : 'link');
   if (account) refreshCatalog().then(refreshOrders).catch(report);
   setInterval(() => {
-    if (account && !document.hidden && activeScreen === 'history') refreshOrders().catch(() => {});
+    if (account && !document.hidden) refreshOrders().catch(() => {});
   },60000);
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('./sw.js').catch(() => {});
 })();
