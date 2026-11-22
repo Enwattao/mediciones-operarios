@@ -1,0 +1,11 @@
+{
+  "id": "./",
+  "name": "Mediciones · Operarios",
+  "short_name": "Mediciones",
+  "lang": "es",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#142320",
+  "theme_color": "#075A53",
+  "icons": [{"src":"./icon.png","sizes":"512x512","type":"image/png"}]
+}
