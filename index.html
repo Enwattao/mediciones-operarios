@@ -445,6 +445,23 @@
 #taller-preview .phone[data-theme="warehouse"] .tiles canvas,#taller-preview .phone[data-theme="warehouse"] .tiles svg {max-height:64px;}
 #taller-preview .phone[data-theme="warehouse"] dialog {background:var(--sheet);color:var(--ink);border-color:var(--line);}
 #taller-preview [data-theme-option="warehouse"] {--sample:#b51933;}
+@media (max-width: 560px) {
+  #taller-preview .elbow-layout {
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;
+    aspect-ratio:auto;min-height:0;margin:0;align-items:end;
+  }
+  #taller-preview .elbow-layout > *,
+  #taller-preview .elbow-layout.mirrored > * {position:static;width:auto;min-width:0;}
+  #taller-preview .elbow-layout .total {grid-area:1 / 1;}
+  #taller-preview .elbow-layout .needed {grid-area:1 / 2;}
+  #taller-preview .elbow-layout .upper-size {grid-area:2 / 1;}
+  #taller-preview .elbow-layout .upper-end {grid-area:2 / 2;}
+  #taller-preview .elbow-layout [data-diagram] {grid-area:3 / 1 / 4 / 3;width:min(100%,205px);justify-self:center;}
+  #taller-preview .elbow-layout .lower-size {grid-area:4 / 1;}
+  #taller-preview .elbow-layout .lower-end {grid-area:4 / 2;}
+  #taller-preview .elbow-layout label {overflow-wrap:normal;}
+  #taller-preview .elbow-layout :is(input,select) {width:100%;min-width:0;height:auto;min-height:44px;font-size:16px;}
+}
 </style>
 <script>
 (() => {
@@ -872,7 +889,7 @@
   function show(screen, message = '') {
     if (!account) screen = 'link';
     activeScreen = screen;
-    find('nav').hidden = !account;
+    find('nav').hidden = !account || screen === 'editor';
     root.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== screen);
     root.querySelectorAll('nav button').forEach(button =>
       button.setAttribute('aria-pressed', String(button.dataset.screen ===
