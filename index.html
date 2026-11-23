@@ -1,5 +1,5 @@
 <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#075a53"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon.png"><title>Mediciones · Operarios</title><script src="./operarios.js"></script></head><body><div id="taller-preview" class="viz-dotted-background">
-  <div class="phone">
+  <div class="phone" data-theme="warehouse">
     <nav aria-label="Mediciones de taller">
       <button data-screen="new" aria-pressed="true">Nuevo pedido</button>
       <button data-screen="history" aria-pressed="false">Historial</button>
@@ -239,7 +239,8 @@
       <button type="button" data-screen="options">← Volver a Opciones</button>
       <h2>Temas</h2>
       <div class="fields" role="group" aria-label="Tema de la aplicación">
-        <button type="button" data-theme-option="green" aria-pressed="true"><span aria-hidden="true"></span>Verde</button>
+        <button type="button" data-theme-option="warehouse" aria-pressed="true"><span aria-hidden="true"></span>Almacén</button>
+        <button type="button" data-theme-option="green" aria-pressed="false"><span aria-hidden="true"></span>Verde</button>
         <button type="button" data-theme-option="graphite" aria-pressed="false"><span aria-hidden="true"></span>Gris y rojo</button>
         <button type="button" data-theme-option="blue" aria-pressed="false"><span aria-hidden="true"></span>Azul</button>
         <button type="button" data-theme-option="violet" aria-pressed="false"><span aria-hidden="true"></span>Violeta</button>
@@ -431,6 +432,19 @@
 #taller-preview .cone-drawing svg {grid-column:1/-1;grid-row:1;max-width:160px;justify-self:center;}
 #taller-preview .cone-drawing :is(input,select) {font-size:16px;}
 #taller-preview [data-notice] {margin-top:10px;color:var(--teal);}
+#taller-preview .phone[data-theme="warehouse"] {
+  color-scheme:light;--paper:#f3f1ee;--sheet:#fff;--ink:#232428;--teal:#b51933;--pale:#f8e9ec;--line:#c4c1bb;--muted:#837e77;--on:#fff;
+  display:flex;flex-direction:column;max-width:560px;font-family:system-ui,sans-serif;
+}
+#taller-preview .phone[data-theme="warehouse"] nav {order:2;position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:8px 0 max(8px,env(safe-area-inset-bottom));z-index:3;}
+#taller-preview .phone[data-theme="warehouse"] nav button:not([aria-pressed="true"]) {background:#fff;color:var(--ink);}
+#taller-preview .phone[data-theme="warehouse"] h2 {letter-spacing:-.03em;}
+#taller-preview .phone[data-theme="warehouse"] .tiles button {min-height:108px;aspect-ratio:auto;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:10px 5px;font-size:14px;line-height:1.25;}
+#taller-preview .phone[data-theme="warehouse"] .tiles button:is(:active,[aria-pressed="true"]) {border-color:var(--teal);background:var(--pale);}
+#taller-preview .phone[data-theme="warehouse"] .tiles img:not(.tube-icon) {width:min(70%,64px);}
+#taller-preview .phone[data-theme="warehouse"] .tiles canvas,#taller-preview .phone[data-theme="warehouse"] .tiles svg {max-height:64px;}
+#taller-preview .phone[data-theme="warehouse"] dialog {background:var(--sheet);color:var(--ink);border-color:var(--line);}
+#taller-preview [data-theme-option="warehouse"] {--sample:#b51933;}
 </style>
 <script>
 (() => {
@@ -1177,7 +1191,7 @@
       button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
     }
   }
-  applyTheme(window.openai?.widgetState?.privateContent?.theme || 'green');
+  applyTheme(localStorage.getItem('mediciones.theme') || 'warehouse');
   window.addEventListener('openai:set_globals', event => {
     applyTheme(event.detail?.globals?.widgetState?.privateContent?.theme);
   });
@@ -1185,6 +1199,7 @@
     button.onclick = () => {
       const theme = button.dataset.themeOption;
       applyTheme(theme);
+      localStorage.setItem('mediciones.theme',theme);
       window.openai?.setWidgetState?.({privateContent: {theme}})?.catch(() => {});
     };
   }
